@@ -5,9 +5,8 @@ from matplotlib import pyplot as plt
 import scienceplots
 
 """
-    Code for generating simple trajectories in the spirit of gradient dynamics.
-    Both the dissipation potential, and entropy used in this simulation are quadratic, resulting
-    in the equation of motion in the form \dot{x} = \gamma*x which we solve with rk4
+    Code for generating simple trajectories in the spirit of GENERIC
+    using the double well potential
 """
 
 parser = argparse.ArgumentParser(prog='simulate_trajectory.py',
@@ -18,41 +17,44 @@ parser.add_argument("--points", default=2048, type=int, help="number of points f
 parser.add_argument("--dim", default=1, type=int, help="dimension of the data")
 parser.add_argument("--dt", default=0.005, type=float, help="size of the time step used in the simulation")
 parser.add_argument("--plot", default=True, type=bool, help="plot the results")
-parser.add_argument("--gamma", default=1.0, type=float, help="the dampening constant")
+parser.add_argument("--gamma", default=0.3, type=float, help="the dampening constant")
+parser.add_argument("--D0", default=1.2, type=float, help="the depth of the well")
+parser.add_argument("--a", default=0.4, type=float, help="the distance of the dips")
 args = parser.parse_args()
 
-def evolution(x):
-    """
-        We are assuming the entropy to be something like S = -1/2 x**2
-        and the dissipation potential to be in the form 1/2 * gamma * x_star ** 2
-    """
-    return -args.gamma * x
+def acceleration(x, v, D0, a, gamma):
+    return -gamma * v - 4*D0 / a**4 * x * (x**2 - a**2)
 
-def rk4(f, x, time_step):
-    """
-        Classical 4th order Runge Kutta implementation,
-    """
+def rk4_step(x, v, dt, D0, a, gamma):
+    k1_x = v
+    k1_v = acceleration(x, v, D0, a, gamma)
 
-    k1i = f(x)
-    k2i = f(x + k1i * time_step/2)
-    k3i = f(x + k2i * time_step/2)
-    k4i = f(x + k3i * time_step)
+    k2_x = v + 0.5 * dt * k1_v
+    k2_v = acceleration(x + 0.5 * dt * k1_x, k2_x, D0, a, gamma)
 
-    return 1/6 * (k1i + 2*k2i + 2*k3i + k4i)
+    k3_x = v + 0.5 * dt * k2_v
+    k3_v = acceleration(x + 0.5 * dt * k2_x, k3_x, D0, a, gamma)
+
+    k4_x = v + dt * k3_v
+    k4_v = acceleration(x + dt * k3_x, k4_x, D0, a, gamma)
+
+    x_new = x + (dt / 6.0) * (k1_x + 2*k2_x + 2*k3_x + k4_x)
+    v_new = v + (dt / 6.0) * (k1_v + 2*k2_v + 2*k3_v + k4_v)
+    return x_new, v_new
 
 data = []
 np.random.seed(21)
 
 for n in range(args.num):
     x = np.array([np.random.uniform(-1,1) for i in range(args.dim)])
+    v = np.array([np.random.uniform(-1,1) for i in range(args.dim)])
     
     time = 0
     dataset = []
     for i in range(args.points):
-        dataset.append([time] + [each for each in x])
+        dataset.append([time] + [each for each in x] + [each for each in v])
 
-        x_dot = rk4(evolution, x, args.dt)
-        x += x_dot * args.dt
+        x,v = rk4_step(x, v, args.dt, args.D0, args.a, args.gamma)
         time += args.dt
 
     dataset = np.array(dataset)
